@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import rospy
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, TwistStamped
 from styx_msgs.msg import Lane, Waypoint
 
 import math
@@ -36,6 +36,7 @@ class WaypointUpdater(object):
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+        # rospy.Subscriber('/current_velocity', TwistStamped, self.current_velocity_cb)
 
         # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
 
@@ -45,50 +46,63 @@ class WaypointUpdater(object):
         # TODO: Add other member variables you need below
         self.last_wp_idx = 0
         self.base_wps = None
+        self.current_pose = None
         self.red_light_position = None
+        self.current_velocity = 0
 
-        rospy.spin()
+        self.loop()
+
+    def loop(self):
+        rate = rospy.Rate(25)  # 10 Hz
+        while not rospy.is_shutdown():
+            rate.sleep()
+            if (self.base_wps is None) or (self.current_pose is None):
+                continue
+            base_wps = list(self.base_wps)
+            curr_pos = self.current_pose.position
+            curr_ort = self.current_pose.orientation
+
+            wp_num = len(base_wps)
+            prev_pos = base_wps[self.last_wp_idx-1].pose.pose.position
+            prev_dist = dist(prev_pos, curr_pos)
+
+            # Look for immediate next waypoint
+            # We assume the waypoints are sorted according to the order by
+            # which the car is expected to go through.
+            for i in range(wp_num):
+                idx = (self.last_wp_idx + i) % wp_num
+                wp_pos = base_wps[idx].pose.pose.position
+                seg_dist = dist(wp_pos, prev_pos)
+                wp_dist = dist(wp_pos, curr_pos)
+
+                if wp_dist <= seg_dist and prev_dist <= seg_dist:
+                   self.last_wp_idx = idx
+                   break
+                prev_pos = wp_pos
+                prev_dist = wp_dist
+        
+            # TODO: Need modifications to take care the traffic light scenario
+            # Construct waypoints for the vehicle to follow
+            waypoints = []
+            for i in range(LOOKAHEAD_WPS):
+                idx = self.last_wp_idx + i
+                if idx >= wp_num:
+                    break
+                wp = copy.deepcopy(base_wps[idx])
+                waypoints.append(wp)
+        
+            # Publish waypoints to /final_waypoints
+            final_waypoints = Lane()
+            final_waypoints.header.stamp = rospy.Time.now()
+            final_waypoints.waypoints = waypoints
+            self.final_waypoints_pub.publish(final_waypoints)
 
     def pose_cb(self, msg):
         # TODO: Implement
-        if self.base_wps is None:
-            return
-        base_wps = list(self.base_wps)
-        curr_pos = msg.pose.position
-        orientation = msg.pose.orientation
+        self.current_pose = msg.pose
 
-        wp_num = len(base_wps)
-        prev_pos = base_wps[self.last_wp_idx-1].pose.pose.position
-        prev_dist = dist(prev_pos, curr_pos)
-
-        # Look for immediate next waypoint
-        # We assume the waypoints are sorted according to the order by
-        # which the car is expected to go through.
-        for i in range(wp_num):
-            idx = (self.last_wp_idx + i) % wp_num
-            wp_pos = base_wps[idx].pose.pose.position
-            seg_dist = dist(wp_pos, prev_pos)
-            wp_dist = dist(wp_pos, curr_pos)
-
-            if wp_dist <= seg_dist and prev_dist <= seg_dist:
-               self.last_wp_idx = idx
-               break
-            prev_pos = wp_pos
-            prev_dist = wp_dist
-        
-        # TODO: Need modifications to take care the traffic light scenario
-        # Construct waypoints for the vehicle to follow
-        waypoints = []
-        for i in range(LOOKAHEAD_WPS):
-            idx = (self.last_wp_idx + i) % wp_num
-            wp = copy.deepcopy(base_wps[idx])
-            waypoints.append(wp)
-        
-        # Publish waypoints to /final_waypoints
-        final_waypoints = Lane()
-        final_waypoints.header.stamp = rospy.Time.now()
-        final_waypoints.waypoints = waypoints
-        self.final_waypoints_pub.publish(final_waypoints)
+    def current_velocity_cb(self, msg):
+        self.current_velocity = msg.twist.linear.x
         
     def waypoints_cb(self, waypoints):
         # TODO: Implement
