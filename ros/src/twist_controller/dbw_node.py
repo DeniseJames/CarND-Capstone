@@ -1,15 +1,19 @@
 #!/usr/bin/env python
 
-import rospy
+import rospy, tf
 from std_msgs.msg import Bool
 from dbw_mkz_msgs.msg import ThrottleCmd, SteeringCmd, BrakeCmd, SteeringReport
 from geometry_msgs.msg import TwistStamped, PoseStamped
 from styx_msgs.msg import Lane
+
 import math
+import time
+import numpy as np
 
 from twist_controller import Controller
 from yaw_controller import YawController
 from speed_controller import SpeedController
+from pid import PID
 
 '''
 You can build this node only after you have built (or partially built) the `waypoint_updater` node.
@@ -33,6 +37,7 @@ Once you have the proposed throttle, brake, and steer values, publish it on the 
 that we have created in the `__init__` function.
 
 '''
+
 
 class DBWNode(object):
     def __init__(self):
@@ -58,17 +63,33 @@ class DBWNode(object):
 
         # TODO: Create `TwistController` object
         # self.controller = TwistController(<Arguments you wish to provide>)
-        speed_controller = SpeedController(vehicle_mass, wheel_radius, accel_limit=accel_limit, decel_limit=decel_limit)
+        # Hard coded pid constants, need experimenting
+        kp, ki, kd = 0.63, 0.003, 2.
+        max_steer_rad = max_steer_angle * math.pi / 180.
+        pid = PID(kp, ki, kd, mn=-max_steer_rad, mx=max_steer_rad)
+
+        speed_controller = SpeedController(vehicle_mass,
+                                           wheel_radius,
+                                           accel_limit=accel_limit,
+                                           decel_limit=decel_limit)
+
         yaw_controller = YawController(wheel_base, steer_ratio, 0.,
-                                       max_lat_accel, max_steer_angle * math.pi / 180.)
-        self.controller = Controller(speed_controller, yaw_controller)
+                                       max_lat_accel, max_steer_rad)
+
+        self.controller = Controller(speed_controller,
+                                     yaw_controller,
+                                     pid)
 
         # Create placeholders for subscription data
         self.target = None            # tuple: (linear_velocity, angular_velocity)
-        self.curr_v = 0                 # double
+        self.curr_v = 0.                # double
         self.dbw_enabled = False        # bool
         self.curr_coord = None          # tuple: (x, y)
+        self.curr_yaw = 0.              # double
         self.final_waypoints = None     # list of waypoints
+        self.prev_time = time.time()    # for pid sample time
+        self.max_steer = max_steer_angle
+
 
         # TODO: Subscribe to all the topics you need to
         self.twist_cmd_sub = rospy.Subscriber('/twist_cmd', TwistStamped, self.twist_cmd_cb)
@@ -90,13 +111,19 @@ class DBWNode(object):
             #                                                     <dbw status>,
             #                                                     <any other argument you need>)
             # if <dbw is enabled>:
+            curr_time = time.time()
+            delta_t = curr_time - self.prev_time
+            self.prev_time = curr_time
             if (self.target is None) or (self.curr_coord is None) or (self.final_waypoints is None):
                 rate.sleep()
                 continue
+            cte = self.get_cte()
             throttle, brake, steer = self.controller.control(self.target[0],
                                                              self.target[1],
                                                              self.curr_v,
-                                                             self.dbw_enabled)
+                                                             self.dbw_enabled,
+                                                             cte, delta_t)
+            steer = min(max(-self.max_steer, steer), self.max_steer)
             if self.dbw_enabled:
                 rospy.loginfo('throttle: %s, brake: %s, steer: %s', throttle, brake, steer)
                 self.publish(throttle, brake, steer)
@@ -130,10 +157,48 @@ class DBWNode(object):
         self.dbw_enabled = msg.data
 
     def current_pose_cb(self, msg):
+        q = (msg.pose.orientation.x,
+             msg.pose.orientation.y,
+             msg.pose.orientation.z,
+             msg.pose.orientation.w)
+        euler = tf.transformations.euler_from_quaternion(q)
+        self.curr_yaw = euler[2]
         self.curr_coord = (msg.pose.position.x, msg.pose.position.y)
 
     def final_waypoints_cb(self, msg):
         self.final_waypoints = msg.waypoints
+
+    def get_cte(self):
+        # Fit waypoints with polynomial or order 3 (at most).
+        waypoints = self.final_waypoints[:8]
+        yaw = self.curr_yaw
+        c, s = math.cos(-yaw), math.sin(-yaw)
+        x0, y0 = self.curr_coord
+        order = min(3, len(waypoints)-1)
+        xs = []
+        ys = []
+        for wp in waypoints:
+            x = wp.pose.pose.position.x - x0
+            y = wp.pose.pose.position.y - y0
+            xs.append(c*x - s*y)
+            ys.append(s*x + c*y)
+
+        f = np.polyfit(xs, ys, order)
+        fp = [i*f[i] for i in xrange(1, len(f))]
+        fpp = [i*fp[i] for i in xrange(1, len(fp))]
+
+        # Apply Newton's method to find cte, using 5 iterations
+        xn = 0.
+        for _ in xrange(5):
+            f_n = np.polyval(f, xn)
+            fp_n = np.polyval(fp, xn)
+            fpp_n = np.polyval(fpp, xn)
+            xn -= (f_n*fp_n + xn) / (fp_n*fp_n + f_n*fpp_n + 1.)
+
+        yn = np.polyval(f, xn)
+        cte = np.sqrt(xn*xn + yn*yn)
+        return -cte if f[0] > 0 else cte
+
 
 if __name__ == '__main__':
     DBWNode()
