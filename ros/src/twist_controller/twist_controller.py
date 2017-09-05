@@ -26,7 +26,6 @@ class Controller(object):
                                                                             current_velocity,
                                                                             delta_t=2.)
 
-        correction = -self.pid.step(cte, delta_t)*math.pi/180.
-        steer = correction + self.yaw_controller.get_steering(final_velocity, angular_velocity, current_velocity)
-        steer *= 180. / math.pi
+        correction = self.pid.step(cte, delta_t)
+        steer = self.yaw_controller.get_steering(final_velocity, angular_velocity, current_velocity) + correction
         return throttle, brake, steer

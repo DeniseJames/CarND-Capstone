@@ -65,8 +65,7 @@ class DBWNode(object):
         # self.controller = TwistController(<Arguments you wish to provide>)
         # Hard coded pid constants, need experimenting
         kp, ki, kd = 0.63, 0.003, 2.
-        max_steer_rad = max_steer_angle * math.pi / 180.
-        pid = PID(kp, ki, kd, mn=-max_steer_rad, mx=max_steer_rad)
+        pid = PID(kp, ki, kd, mn=-math.pi/2., mx=math.pi/2.)
 
         speed_controller = SpeedController(vehicle_mass,
                                            wheel_radius,
@@ -74,7 +73,7 @@ class DBWNode(object):
                                            decel_limit=decel_limit)
 
         yaw_controller = YawController(wheel_base, steer_ratio, 0.,
-                                       max_lat_accel, max_steer_rad)
+                                       max_lat_accel, max_steer_angle)
 
         self.controller = Controller(speed_controller,
                                      yaw_controller,
@@ -101,7 +100,7 @@ class DBWNode(object):
         self.loop()
 
     def loop(self):
-        rate = rospy.Rate(25) # 50Hz
+        rate = rospy.Rate(50) # 50Hz
         while not rospy.is_shutdown():
             # TODO: Get predicted throttle, brake, and steering using `twist_controller`
             # You should only publish the control commands if dbw is enabled
@@ -171,7 +170,9 @@ class DBWNode(object):
     def get_cte(self):
         # Fit waypoints with polynomial or order 3 (at most).
         waypoints = self.final_waypoints[:8]
-        yaw = self.curr_yaw
+        dy = waypoints[-1].pose.pose.position.y - waypoints[0].pose.pose.position.y
+        dx = waypoints[-1].pose.pose.position.x - waypoints[0].pose.pose.position.x
+        yaw = math.atan2(dy, dx)
         c, s = math.cos(-yaw), math.sin(-yaw)
         x0, y0 = self.curr_coord
         order = min(3, len(waypoints)-1)
@@ -197,7 +198,7 @@ class DBWNode(object):
 
         yn = np.polyval(f, xn)
         cte = np.sqrt(xn*xn + yn*yn)
-        return -cte if f[0] > 0 else cte
+        return cte if yn > 0 else -cte
 
 
 if __name__ == '__main__':
