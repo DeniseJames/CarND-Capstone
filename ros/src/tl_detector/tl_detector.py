@@ -11,7 +11,10 @@ import tf
 import cv2
 from traffic_light_config import config
 
+import numpy as np
+
 STATE_COUNT_THRESHOLD = 3
+
 
 class TLDetector(object):
     def __init__(self):
@@ -98,8 +101,24 @@ class TLDetector(object):
 
         """
         #TODO implement
-        return 0
+        # Naive approach
+        def d2(p1, p2):
+            dx = p1.position.x - p2.position.x
+            dy = p1.position.y - p2.position.y
+            return dx*dx + dy*dy
 
+        if self.waypoints is None:
+            return 0
+        waypoints = self.waypoints.waypoints
+
+        closest_idx = 0
+        min_dist = float('inf')
+        for idx, wp in enumerate(waypoints):
+            d = d2(pose, wp.pose.pose)
+            if d < min_dist:
+                min_dist = d
+                closest_idx = idx
+        return closest_idx
 
     def project_to_image_plane(self, point_in_world):
         """Project point from 3D world coordinates to 2D camera image location
@@ -133,9 +152,30 @@ class TLDetector(object):
 
         #TODO Use tranform and rotation to calculate 2D position of light in image
 
-        x = 0
-        y = 0
+        q = (rot.x, rot.y, rot.z, rot.w)
+        row, pitch, yaw = tf.transformations.euler_from_quaternion(q)
 
+        cx, sx = np.cos(row), np.sin(row)
+        Rx = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]])
+
+        cy, sy = np.cos(pitch), np.sin(pitch)
+        Ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]])
+
+        cz, sz = np.cos(yaw), np.sin(yaw)
+        Rz = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]])
+
+        R = Rx * Ry * Rz
+
+        rvec = cv2.Rodrigues(R)
+        tvec = np.array([trans.x, trans.y, trans.z])
+        cam_mat = np.array([[fx, 0, 0], [0, fy, 0], [0, 0, 1]])
+
+        p_world = np.array([point_in_world.x, point_in_world.y, point_in_world.z])
+
+        p_outs, _ = cv2.projectPoints([p_world], rvec, tvec, cam_mat, None)
+        x, y = p_outs.flatten()
+        x = int(round(x + image_width/2))
+        y = int(round(y + image_height/2))
         return (x, y)
 
     def get_light_state(self, light):
@@ -158,6 +198,7 @@ class TLDetector(object):
         x, y = self.project_to_image_plane(light.pose.pose.position)
 
         #TODO use light location to zoom in on traffic light in image
+        # Need to define a region and an input size for the model
 
         #Get classification
         return self.light_classifier.get_classification(cv_image)
