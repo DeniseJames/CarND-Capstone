@@ -222,10 +222,33 @@ class TLDetector(object):
 
         #TODO find the closest visible traffic light (if one exists)
 
+        ############################################################
+        # Here we use the data given by "/vehicle/traffic_lights" for development purpose.
+        # Need to change back to config file before submission
+        if not self.lights or not self.waypoints:
+            return -1, TrafficLight.UNKNOWN
+
+        lights = self.lights
+        waypoints = self.waypoints
+        closest_light_idxs = [self.get_closest_waypoint(l.pose.pose) for l in waypoints]
+        max_closest_wp = max(closest_light_idxs)
+        min_closest_wp = min(closest_light_idxs)
+        closest_light_idx = len(waypoints)
+        for wp_idx, tl in zip(closest_light_idxs, lights):
+            if ((wp_idx >= car_position) and (wp_idx < closest_light_idx)) \
+                or ((wp_idx == min_closest_wp) and (car_position > max_closest_wp)):
+                closest_light_idx = wp_idx
+                light = tl
+
         if light:
             state = self.get_light_state(light)
-            return light_wp, state
-        self.waypoints = None
+            return closest_light_idx, state
+        ############################################################
+
+        # if light:
+        #     state = self.get_light_state(light)
+        #     return light_wp, state
+        # self.waypoints = None
         return -1, TrafficLight.UNKNOWN
 
 if __name__ == '__main__':

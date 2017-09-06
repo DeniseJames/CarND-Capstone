@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import rospy
+from std_msgs.msg import Int32
 from geometry_msgs.msg import PoseStamped, TwistStamped
 from styx_msgs.msg import Lane, Waypoint
 
@@ -36,19 +37,21 @@ class WaypointUpdater(object):
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
-        # rospy.Subscriber('/current_velocity', TwistStamped, self.current_velocity_cb)
+        rospy.Subscriber('/current_velocity', TwistStamped, self.current_velocity_cb)
 
         # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
-
+        rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb)
 
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
         # TODO: Add other member variables you need below
         self.last_wp_idx = 0
         self.base_wps = None
+        self.wp_dist = None
         self.current_pose = None
         self.red_light_position = None
         self.current_velocity = 0
+        self.red_light_wp = -1
 
         self.loop()
 
@@ -58,7 +61,8 @@ class WaypointUpdater(object):
             rate.sleep()
             if (self.base_wps is None) or (self.current_pose is None):
                 continue
-            base_wps = list(self.base_wps)
+            base_wps = self.base_wps
+            wp_dist = self.wp_dist
             curr_pos = self.current_pose.position
             curr_ort = self.current_pose.orientation
 
@@ -84,13 +88,46 @@ class WaypointUpdater(object):
             # TODO: Need modifications to take care the traffic light scenario
             # Construct waypoints for the vehicle to follow
             waypoints = []
+            wp_d = []
             for i in range(LOOKAHEAD_WPS):
-                idx = self.last_wp_idx + i
-                if idx >= wp_num:
-                    break
+                idx = (self.last_wp_idx + i) % wp_num  # for continuing the lap
                 wp = copy.deepcopy(base_wps[idx])
                 waypoints.append(wp)
-        
+                wp_d.append(wp_dist[idx])
+            wp_d[0] = dist(curr_pos, waypoints[0].pose.pose.position)
+
+
+            # Get acceleration limit to determine achievable speed
+            accel_limit = rospy.get_param('/dbw_node/accel_lmit', 1.)
+            v = self.current_velocity
+            max_v = 0.
+            for wp, dist in zip(waypoints, wp_d):
+                v = min(wp.twist.twist.linear.x, math.sqrt(v*v + 2*accel_limit*dist)
+                wp.twist.twist.linear.x = v
+                if v > max_v: max_v = v
+
+            # Get deceleration limit to determine achievable speed
+            if self.red_light_wp >= 0:
+                max_decel = min(abs(rospy.get_param('/dbw_node/decel_limit', -1.)), 1.)
+                v = 0.
+                idx = self.red_light_wp
+                max_zero_count = 6
+                count = 0
+                while idx != self.last_wp_idx-1:
+                    if count < max_zero_count:
+                        count += 1
+                    else:
+                        v = math.sqrt(v*v + 2*max_decel*wp_dist[(idx+1) % wp_num])
+                    wp_idx = (idx - self.last_wp_idx) % wp_num
+                    if wp_idx < LOOKAHEAD_WPS:
+                        wp = waypoints[wp_idx]
+                        if v < wp.twist.twist.linear.x:
+                            wp.twist.twist.linear.x = v
+                        else:
+                            break
+                    if v >= max_v: break
+                    idx = (idx - 1) % wp_num
+
             # Publish waypoints to /final_waypoints
             final_waypoints = Lane()
             final_waypoints.header.stamp = rospy.Time.now()
@@ -106,11 +143,15 @@ class WaypointUpdater(object):
         
     def waypoints_cb(self, waypoints):
         # TODO: Implement
-        self.base_wps = waypoints.waypoints
+        wps = waypoints.waypoints
+        wp_dist = [dist(wps[i].pose.pose.position, wps[i-1].pose.pose.position) for i in range(len(wps))]
+        self.wp_dist = wp_dist
+        self.base_wps = wps
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
-        pass
+        self.red_light_wp = msg.data
+
 
     def obstacle_cb(self, msg):
         # TODO: Callback for /obstacle_waypoint message. We will implement it later
