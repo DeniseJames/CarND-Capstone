@@ -36,7 +36,7 @@ class TLDetector(object):
         testing your solution in real life so don't rely on it in the final submission.
         '''
         sub3 = rospy.Subscriber('/vehicle/traffic_lights', TrafficLightArray, self.traffic_cb)
-        sub6 = rospy.Subscriber('/camera/image_raw', Image, self.image_cb)
+        sub6 = rospy.Subscriber('/image_color', Image, self.image_cb)
 
         config_string = rospy.get_param("/traffic_light_config")
         self.config = yaml.load(config_string)
@@ -74,6 +74,7 @@ class TLDetector(object):
         self.has_image = True
         self.camera_image = msg
         light_wp, state = self.process_traffic_lights()
+        rospy.loginfo('image_cb called')
 
         '''
         Publish upcoming red lights at camera frequency.
@@ -167,7 +168,7 @@ class TLDetector(object):
         cz, sz = np.cos(yaw), np.sin(yaw)
         Rz = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]])
 
-        R = Rx * Ry * Rz
+        R = np.dot(Rx, np.dot(Rx, Rz))
 
         rvec = cv2.Rodrigues(R)
         tvec = np.array([trans.x, trans.y, trans.z])
@@ -222,27 +223,28 @@ class TLDetector(object):
 
         #TODO find the closest visible traffic light (if one exists)
 
-        ############################################################
-        # Here we use the data given by "/vehicle/traffic_lights" for development purpose.
-        # Need to change back to config file before submission
-        if not self.lights or not self.waypoints:
+        if (self.lights is None) or (self.waypoints is None):
             return -1, TrafficLight.UNKNOWN
 
         lights = self.lights
-        waypoints = self.waypoints
+        waypoints = self.waypoints.waypoints
         closest_light_idxs = [self.get_closest_waypoint(l.pose.pose) for l in waypoints]
-        max_closest_wp = max(closest_light_idxs)
-        min_closest_wp = min(closest_light_idxs)
-        closest_light_idx = len(waypoints)
+        max_wp = max(closest_light_idxs)
+        min_wp = min(closest_light_idxs)
+        light_wp = len(waypoints)
         for wp_idx, tl in zip(closest_light_idxs, lights):
-            if ((wp_idx >= car_position) and (wp_idx < closest_light_idx)) \
-                or ((wp_idx == min_closest_wp) and (car_position > max_closest_wp)):
-                closest_light_idx = wp_idx
+            if ((wp_idx >= car_position) and (wp_idx < light_wp)) \
+                or ((wp_idx == min_wp) and (car_position > max_wp)):
+                light_wp = wp_idx
                 light = tl
 
+        rospy.loginfo('### light_wp: %s', light_wp)
+
+        ############################################################
+        # Here we use the data given by "/vehicle/traffic_lights" for development purpose.
+        # Need to change back to config file before submission
         if light:
-            state = self.get_light_state(light)
-            return closest_light_idx, state
+            return light_wp, light.state
         ############################################################
 
         # if light:

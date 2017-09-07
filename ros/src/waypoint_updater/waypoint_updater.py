@@ -77,13 +77,13 @@ class WaypointUpdater(object):
                 idx = (self.last_wp_idx + i) % wp_num
                 wp_pos = base_wps[idx].pose.pose.position
                 seg_dist = dist(wp_pos, prev_pos)
-                wp_dist = dist(wp_pos, curr_pos)
+                curr_dist = dist(wp_pos, curr_pos)
 
-                if wp_dist <= seg_dist and prev_dist <= seg_dist:
+                if curr_dist <= seg_dist and prev_dist <= seg_dist:
                    self.last_wp_idx = idx
                    break
                 prev_pos = wp_pos
-                prev_dist = wp_dist
+                prev_dist = curr_dist
         
             # TODO: Need modifications to take care the traffic light scenario
             # Construct waypoints for the vehicle to follow
@@ -98,13 +98,13 @@ class WaypointUpdater(object):
 
 
             # Get acceleration limit to determine achievable speed
-            accel_limit = rospy.get_param('/dbw_node/accel_lmit', 1.)
-            v = self.current_velocity
-            max_v = 0.
-            for wp, dist in zip(waypoints, wp_d):
-                v = min(wp.twist.twist.linear.x, math.sqrt(v*v + 2*accel_limit*dist)
-                wp.twist.twist.linear.x = v
-                if v > max_v: max_v = v
+            # accel_limit = rospy.get_param('/dbw_node/accel_lmit', 1.)
+            # v = self.current_velocity
+            # max_v = 0.
+            # for wp, d in zip(waypoints, wp_d):
+            #     v = min(wp.twist.twist.linear.x, math.sqrt(v*v + 2*accel_limit*d))
+            #     wp.twist.twist.linear.x = v
+            #     if v > max_v: max_v = v
 
             # Get deceleration limit to determine achievable speed
             if self.red_light_wp >= 0:
@@ -127,6 +127,8 @@ class WaypointUpdater(object):
                             break
                     if v >= max_v: break
                     idx = (idx - 1) % wp_num
+
+            rospy.loginfo('#### red_light_wp: %s', self.red_light_wp)
 
             # Publish waypoints to /final_waypoints
             final_waypoints = Lane()
