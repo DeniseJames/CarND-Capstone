@@ -6,11 +6,12 @@ import math
 
 
 class Controller(object):
-    def __init__(self, speed_controller, yaw_controller, pid):
+    def __init__(self, speed_controller, yaw_controller, pid, steer_filter):
         # TODO: Implement
         self.speed_controller = speed_controller
         self.yaw_controller = yaw_controller
         self.pid = pid
+        self.steer_filter = steer_filter
 
     def control(self, linear_velocity, angular_velocity, current_velocity, enable_dbw, cte, delta_t):
         # TODO: Change the arg, kwarg list to suit your needs
@@ -21,11 +22,12 @@ class Controller(object):
             self.pid.reset()
             return 0, 0, 0
 
-        # Calculate throttle, and under which the linear velocity after 2 seconds
+        # Calculate throttle, and under which the linear velocity after 1s
         throttle, brake, final_velocity = self.speed_controller.get_control(linear_velocity,
                                                                             current_velocity,
-                                                                            delta_t=2.)
+                                                                            delta_t=1)
 
         correction = self.pid.step(cte, delta_t)
         steer = self.yaw_controller.get_steering(final_velocity, angular_velocity, current_velocity) + correction
+        steer = self.steer_filter.filt(steer)
         return throttle, brake, steer

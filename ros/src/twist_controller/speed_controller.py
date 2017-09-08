@@ -12,7 +12,7 @@ class SpeedController(object):
         self.accel_limit = accel_limit
         self.decel_limit = decel_limit
 
-    def get_control(self, target_speed, current_speed, delta_t=2.):
+    def get_control(self, target_speed, current_speed, delta_t=1.):
         """
         Computes linear controls
 

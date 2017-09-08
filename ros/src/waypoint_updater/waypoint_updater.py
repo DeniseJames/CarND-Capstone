@@ -35,12 +35,12 @@ class WaypointUpdater(object):
     def __init__(self):
         rospy.init_node('waypoint_updater')
 
-        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
-        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
-        rospy.Subscriber('/current_velocity', TwistStamped, self.current_velocity_cb)
+        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
+        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
+        rospy.Subscriber('/current_velocity', TwistStamped, self.current_velocity_cb, queue_size=1)
 
         # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
-        rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb)
+        rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb, queue_size=1)
 
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
@@ -64,7 +64,6 @@ class WaypointUpdater(object):
             base_wps = self.base_wps
             wp_dist = self.wp_dist
             curr_pos = self.current_pose.position
-            curr_ort = self.current_pose.orientation
 
             wp_num = len(base_wps)
             prev_pos = base_wps[self.last_wp_idx-1].pose.pose.position
@@ -73,7 +72,7 @@ class WaypointUpdater(object):
             # Look for immediate next waypoint
             # We assume the waypoints are sorted according to the order by
             # which the car is expected to go through.
-            for i in range(wp_num):
+            for i in xrange(wp_num):
                 idx = (self.last_wp_idx + i) % wp_num
                 wp_pos = base_wps[idx].pose.pose.position
                 seg_dist = dist(wp_pos, prev_pos)
@@ -89,10 +88,13 @@ class WaypointUpdater(object):
             # Construct waypoints for the vehicle to follow
             waypoints = []
             wp_d = []
-            for i in range(LOOKAHEAD_WPS):
+            max_v = 0.
+            for i in xrange(LOOKAHEAD_WPS):
                 idx = (self.last_wp_idx + i) % wp_num  # for continuing the lap
                 wp = copy.deepcopy(base_wps[idx])
+                v = wp.twist.twist.linear.x
                 waypoints.append(wp)
+                if v > max_v: max_v = v
                 wp_d.append(wp_dist[idx])
             wp_d[0] = dist(curr_pos, waypoints[0].pose.pose.position)
 
@@ -107,28 +109,35 @@ class WaypointUpdater(object):
             #     if v > max_v: max_v = v
 
             # Get deceleration limit to determine achievable speed
+            rospy.loginfo('### red_light_wp: %s', self.red_light_wp)
             if self.red_light_wp >= 0:
                 max_decel = min(abs(rospy.get_param('/dbw_node/decel_limit', -1.)), 1.)
                 v = 0.
                 idx = self.red_light_wp
                 max_zero_count = 6
                 count = 0
-                while idx != self.last_wp_idx-1:
+                while idx != (self.last_wp_idx-1) % wp_num:
+                    wp_idx = (idx - self.last_wp_idx) % wp_num
+                    if wp_idx < LOOKAHEAD_WPS:
+                        for fw_idx in xrange(wp_idx, LOOKAHEAD_WPS):
+                            fw_wp = waypoints[fw_idx]
+                            if fw_wp.twist.twist.linear.x > v:
+                                fw_wp.twist.twist.linear.x = v
+                            else:
+                                break
+#                        wp = waypoints[wp_idx]
+#                        if v < wp.twist.twist.linear.x:
+#                            wp.twist.twist.linear.x = v
+#                        else:
+#                            break
+                    if v >= max_v: break
+                    idx = (idx - 1) % wp_num
                     if count < max_zero_count:
                         count += 1
                     else:
-                        v = math.sqrt(v*v + 2*max_decel*wp_dist[(idx+1) % wp_num])
-                    wp_idx = (idx - self.last_wp_idx) % wp_num
-                    if wp_idx < LOOKAHEAD_WPS:
-                        wp = waypoints[wp_idx]
-                        if v < wp.twist.twist.linear.x:
-                            wp.twist.twist.linear.x = v
-                        else:
-                            break
-                    if v >= max_v: break
-                    idx = (idx - 1) % wp_num
+                        v = math.sqrt(v*v + 2*max_decel*wp_dist[idx])
 
-            rospy.loginfo('#### red_light_wp: %s', self.red_light_wp)
+            rospy.loginfo('#### target_vel: %s', [wp.twist.twist.linear.x for wp in waypoints])
 
             # Publish waypoints to /final_waypoints
             final_waypoints = Lane()
@@ -146,7 +155,7 @@ class WaypointUpdater(object):
     def waypoints_cb(self, waypoints):
         # TODO: Implement
         wps = waypoints.waypoints
-        wp_dist = [dist(wps[i].pose.pose.position, wps[i-1].pose.pose.position) for i in range(len(wps))]
+        wp_dist = [dist(wps[i].pose.pose.position, wps[i-1].pose.pose.position) for i in xrange(len(wps))]
         self.wp_dist = wp_dist
         self.base_wps = wps
 
@@ -168,7 +177,7 @@ class WaypointUpdater(object):
     def distance(self, waypoints, wp1, wp2):
         dist = 0
         dl = lambda a, b: math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
-        for i in range(wp1, wp2+1):
+        for i in xrange(wp1, wp2+1):
             dist += dl(waypoints[wp1].pose.pose.position, waypoints[i].pose.pose.position)
             wp1 = i
         return dist

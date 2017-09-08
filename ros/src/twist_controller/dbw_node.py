@@ -14,6 +14,7 @@ from twist_controller import Controller
 from yaw_controller import YawController
 from speed_controller import SpeedController
 from pid import PID
+from lowpass import LowPassFilter
 
 '''
 You can build this node only after you have built (or partially built) the `waypoint_updater` node.
@@ -75,9 +76,11 @@ class DBWNode(object):
         yaw_controller = YawController(wheel_base, steer_ratio, 0.,
                                        max_lat_accel, max_steer_angle)
 
+        steer_filter = LowPassFilter(1., 1.)
+
         self.controller = Controller(speed_controller,
                                      yaw_controller,
-                                     pid)
+                                     pid, steer_filter)
 
         # Create placeholders for subscription data
         self.target = None            # tuple: (linear_velocity, angular_velocity)
@@ -91,11 +94,11 @@ class DBWNode(object):
 
 
         # TODO: Subscribe to all the topics you need to
-        self.twist_cmd_sub = rospy.Subscriber('/twist_cmd', TwistStamped, self.twist_cmd_cb)
-        self.current_velocity_sub = rospy.Subscriber('/current_velocity', TwistStamped, self.current_velocity_cb)
-        self.dbw_enabled_sub = rospy.Subscriber('/vehicle/dbw_enabled', Bool, self.dbw_enabled_cb)
-        self.current_pose_sub = rospy.Subscriber('/current_pose', PoseStamped, self.current_pose_cb)
-        self.final_waypoints_sub = rospy.Subscriber('/final_waypoints', Lane, self.final_waypoints_cb)
+        self.twist_cmd_sub = rospy.Subscriber('/twist_cmd', TwistStamped, self.twist_cmd_cb, queue_size=1)
+        self.current_velocity_sub = rospy.Subscriber('/current_velocity', TwistStamped, self.current_velocity_cb, queue_size=1)
+        self.dbw_enabled_sub = rospy.Subscriber('/vehicle/dbw_enabled', Bool, self.dbw_enabled_cb, queue_size=1)
+        self.current_pose_sub = rospy.Subscriber('/current_pose', PoseStamped, self.current_pose_cb, queue_size=1)
+        self.final_waypoints_sub = rospy.Subscriber('/final_waypoints', Lane, self.final_waypoints_cb, queue_size=1)
 
         self.loop()
 
