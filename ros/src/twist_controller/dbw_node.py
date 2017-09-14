@@ -76,11 +76,12 @@ class DBWNode(object):
         yaw_controller = YawController(wheel_base, steer_ratio, 0.,
                                        max_lat_accel, max_steer_angle)
 
+        angle_filter = LowPassFilter(1., 1.)
         steer_filter = LowPassFilter(1., 1.)
 
         self.controller = Controller(speed_controller,
                                      yaw_controller,
-                                     pid, steer_filter)
+                                     pid, angle_filter, steer_filter)
 
         # Create placeholders for subscription data
         self.target = None            # tuple: (linear_velocity, angular_velocity)
