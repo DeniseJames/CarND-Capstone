@@ -24,7 +24,7 @@ class Controller(object):
             return 0, 0, 0
 
         # Calculate throttle, and under which the linear velocity after 1s
-        throttle, brake, final_velocity = self.speed_controller.get_control(linear_velocity,
+        ctrl, final_velocity, is_throttle = self.speed_controller.get_control(linear_velocity,
                                                                             current_velocity,
                                                                             delta_t=1)
 
@@ -32,4 +32,5 @@ class Controller(object):
         angular_velocity = self.angle_filter.filt(angular_velocity)
         steer = self.yaw_controller.get_steering(final_velocity, angular_velocity, current_velocity) + correction
         steer = self.steer_filter.filt(steer)
-        return throttle, brake, steer
+        return ctrl, steer, is_throttle
+        # return throttle, brake, steer

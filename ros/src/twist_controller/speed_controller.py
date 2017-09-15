@@ -26,9 +26,9 @@ class SpeedController(object):
         final_speed = current_speed + accel * delta_t
         torque = self.vehicle_mass * accel * self.wheel_radius
         if torque > 0:
-            return min(1., torque / MAX_ACCEL_TORQUE), 0, final_speed
+            return min(1., torque / MAX_ACCEL_TORQUE), final_speed, True
         else:
-            return 0, min(abs(torque), MAX_BRAKE_TORQUE), final_speed
+            return min(abs(torque), MAX_BRAKE_TORQUE), final_speed, False
 
     def get_acceleration(self, delta_v, delta_t):
         accel = delta_v / delta_t
