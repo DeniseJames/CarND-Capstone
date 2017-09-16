@@ -39,6 +39,9 @@ class TLDetector(object):
         sub3 = rospy.Subscriber('/vehicle/traffic_lights', TrafficLightArray, self.traffic_cb, queue_size=1)
         sub6 = rospy.Subscriber('/image_color', Image, self.image_cb, queue_size=1)
 
+        #### For saving camera images
+        # sub6 = rospy.Subscriber('/image_color', Image, self.image_save_cb, queue_size=None)
+
         config_string = rospy.get_param("/traffic_light_config")
         self.config = yaml.load(config_string)
 
@@ -53,6 +56,9 @@ class TLDetector(object):
         self.last_wp = -1
         self.state_count = 0
 
+        ### For saving camera images
+        # self.save_count = 0
+        # self.loop()
         rospy.spin()
 
     def pose_cb(self, msg):
@@ -68,6 +74,24 @@ class TLDetector(object):
         lights = [((self.get_closest_waypoint(l.pose.pose)+OFFSET)%wp_num, l) for l in msg.lights]
         lights.sort()
         self.lights = lights
+
+    #### For saving camera images
+    # def image_save_cb(self, msg):
+    #     self.camera_image = msg
+
+    #### For saving camera images
+    # def loop(self):
+    #     rate = rospy.Rate(5)
+    #     while not rospy.is_shutdown():
+    #         if self.camera_image is None:
+    #             rate.sleep()
+    #             continue
+    #         self.camera_image.encoding = 'rgb8'
+    #         cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
+    #         cv2.imwrite('images/%06d.png' % self.save_count, cv_image)
+    #         self.save_count += 1
+    #         rate.sleep()
+        
 
     def image_cb(self, msg):
         """Identifies red lights in the incoming camera image and publishes the index

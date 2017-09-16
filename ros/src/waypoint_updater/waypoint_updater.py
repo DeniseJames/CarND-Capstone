@@ -72,15 +72,21 @@ class WaypointUpdater(object):
             # Look for immediate next waypoint
             # We assume the waypoints are sorted according to the order by
             # which the car is expected to go through.
+            min_dist = float('inf')
             for i in xrange(wp_num):
                 idx = (self.last_wp_idx + i) % wp_num
                 wp_pos = base_wps[idx].pose.pose.position
-                seg_dist = dist(wp_pos, prev_pos)
+                # seg_dist = dist(wp_pos, prev_pos)
                 curr_dist = dist(wp_pos, curr_pos)
-
-                if curr_dist <= seg_dist and prev_dist <= seg_dist:
-                   self.last_wp_idx = idx
-                   break
+                d = curr_dist + prev_dist
+                if d < min_dist:
+                    self.last_wp_idx = idx
+                    min_dist = d
+                else:
+                    break
+                #if curr_dist <= seg_dist and prev_dist <= seg_dist:
+                #    self.last_wp_idx = idx
+                #    break
                 prev_pos = wp_pos
                 prev_dist = curr_dist
         
@@ -97,16 +103,6 @@ class WaypointUpdater(object):
                 if v > max_v: max_v = v
                 wp_d.append(wp_dist[idx])
             wp_d[0] = dist(curr_pos, waypoints[0].pose.pose.position)
-
-
-            # Get acceleration limit to determine achievable speed
-            # accel_limit = rospy.get_param('/dbw_node/accel_lmit', 1.)
-            # v = self.current_velocity
-            # max_v = 0.
-            # for wp, d in zip(waypoints, wp_d):
-            #     v = min(wp.twist.twist.linear.x, math.sqrt(v*v + 2*accel_limit*d))
-            #     wp.twist.twist.linear.x = v
-            #     if v > max_v: max_v = v
 
             # Get deceleration limit to determine achievable speed
             rospy.loginfo('### red_light_wp: %s', self.red_light_wp)
@@ -125,11 +121,6 @@ class WaypointUpdater(object):
                                 fw_wp.twist.twist.linear.x = v
                             else:
                                 break
-#                        wp = waypoints[wp_idx]
-#                        if v < wp.twist.twist.linear.x:
-#                            wp.twist.twist.linear.x = v
-#                        else:
-#                            break
                     if v >= max_v: break
                     idx = (idx - 1) % wp_num
                     if count < max_zero_count:

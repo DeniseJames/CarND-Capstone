@@ -65,7 +65,7 @@ class DBWNode(object):
         # TODO: Create `TwistController` object
         # self.controller = TwistController(<Arguments you wish to provide>)
         # Hard coded pid constants, need experimenting
-        kp, ki, kd = 0.63, 0.003, 2.
+        kp, ki, kd = np.array([0.63, 0.003, 2.]) * np.pi / 180. * steer_ratio
         pid = PID(kp, ki, kd, mn=-math.pi/2., mx=math.pi/2.)
 
         speed_controller = SpeedController(vehicle_mass,
