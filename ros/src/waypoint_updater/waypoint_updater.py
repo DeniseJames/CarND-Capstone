@@ -25,6 +25,7 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
 LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
+OFFSET_DIST = 24.  # Distance between the traffic light and the stopping line.
 
 
 def dist(a, b):
@@ -110,7 +111,14 @@ class WaypointUpdater(object):
                 max_decel = min(abs(rospy.get_param('/dbw_node/decel_limit', -1.)), 1.)
                 v = 0.
                 idx = self.red_light_wp
-                max_zero_count = 6
+
+                # offset idx to match stopping line
+                offset = OFFSET_DIST
+                while offset > 0.:
+                    offset -= self.wp_dist[idx]
+                    idx = (idx - 1) % wp_num
+
+                max_zero_count = 1
                 count = 0
                 while idx != (self.last_wp_idx-1) % wp_num:
                     wp_idx = (idx - self.last_wp_idx) % wp_num
