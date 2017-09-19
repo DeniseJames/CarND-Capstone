@@ -7,14 +7,9 @@ from geometry_msgs.msg import TwistStamped, PoseStamped
 from styx_msgs.msg import Lane
 
 import math
-import time
 import numpy as np
 
 from twist_controller import Controller
-from yaw_controller import YawController
-from speed_controller import SpeedController
-from pid import PID
-from lowpass import LowPassFilter
 
 '''
 You can build this node only after you have built (or partially built) the `waypoint_updater` node.
@@ -65,32 +60,17 @@ class DBWNode(object):
         # TODO: Create `TwistController` object
         # self.controller = TwistController(<Arguments you wish to provide>)
         # Hard coded pid constants, need experimenting
-        kp, ki, kd = np.array([0.63, 0.003, 2.]) * np.pi / 180. * steer_ratio
-        pid = PID(kp, ki, kd, mn=-math.pi/2., mx=math.pi/2.)
-
-        speed_controller = SpeedController(vehicle_mass,
-                                           wheel_radius,
-                                           accel_limit=accel_limit,
-                                           decel_limit=decel_limit)
-
-        yaw_controller = YawController(wheel_base, steer_ratio, 0.,
-                                       max_lat_accel, max_steer_angle)
-
-        angle_filter = LowPassFilter(1., 1.)
-        steer_filter = LowPassFilter(1., 1.)
-
-        self.controller = Controller(speed_controller,
-                                     yaw_controller,
-                                     pid, angle_filter, steer_filter)
+        self.controller = Controller(vehicle_mass, fuel_capacity, brake_deadband, decel_limit,
+                                     accel_limit, wheel_radius, wheel_base, steer_ratio,
+                                     max_lat_accel, max_steer_angle)
 
         # Create placeholders for subscription data
-        self.target = None            # tuple: (linear_velocity, angular_velocity)
+        self.target = None              # tuple: (linear_velocity, angular_velocity)
         self.curr_v = 0.                # double
         self.dbw_enabled = False        # bool
         self.curr_coord = None          # tuple: (x, y)
         self.curr_yaw = 0.              # double
         self.final_waypoints = None     # list of waypoints
-        self.prev_time = time.time()    # for pid sample time
         self.max_steer = max_steer_angle
 
 
@@ -114,30 +94,19 @@ class DBWNode(object):
             #                                                     <dbw status>,
             #                                                     <any other argument you need>)
             # if <dbw is enabled>:
-            curr_time = time.time()
-            delta_t = curr_time - self.prev_time
-            self.prev_time = curr_time
             if (self.target is None) or (self.curr_coord is None) or (self.final_waypoints is None):
                 rate.sleep()
                 continue
             cte = self.get_cte()
-            #throttle, brake, steer = self.controller.control(self.target[0],
-            #                                                 self.target[1],
-            #                                                 self.curr_v,
-            #                                                 self.dbw_enabled,
-            #                                                 cte, delta_t)
-
             ctrl, steer, is_throttle = self.controller.control(self.target[0],
                                                                self.target[1],
                                                                self.curr_v,
                                                                self.dbw_enabled,
-                                                               cte, delta_t)
+                                                               cte)
             steer = min(max(-self.max_steer, steer), self.max_steer)
             if self.dbw_enabled:
-                # rospy.loginfo('throttle: %s, brake: %s, steer: %s', throttle, brake, steer)
                 if is_throttle: rospy.loginfo('throttle: %s, steer: %s', ctrl, steer)
                 else: rospy.loginfo('brake: %s, steer: %s', ctrl, steer)
-                # self.publish(throttle, brake, steer)
                 self.publish(ctrl, steer, is_throttle)
             rate.sleep()
 
@@ -159,8 +128,6 @@ class DBWNode(object):
         scmd.enable = True
         scmd.steering_wheel_angle_cmd = steer
         self.steer_pub.publish(scmd)
-
-
 
     def twist_cmd_cb(self, msg):
         self.target = (msg.twist.linear.x, msg.twist.angular.z)

@@ -118,7 +118,7 @@ class WaypointUpdater(object):
                     offset -= self.wp_dist[idx]
                     idx = (idx - 1) % wp_num
 
-                max_zero_count = 1
+                max_zero_count = 3
                 count = 0
                 while idx != (self.last_wp_idx-1) % wp_num:
                     wp_idx = (idx - self.last_wp_idx) % wp_num
