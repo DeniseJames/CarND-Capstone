@@ -13,6 +13,7 @@ import cv2
 import yaml
 
 import numpy as np
+import bisect as bs
 
 STATE_COUNT_THRESHOLD = 3
 
@@ -44,6 +45,7 @@ class TLDetector(object):
 
         config_string = rospy.get_param("/traffic_light_config")
         self.config = yaml.load(config_string)
+        self.stop_lines = None
 
         self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
 
@@ -68,6 +70,9 @@ class TLDetector(object):
 
     def waypoints_cb(self, waypoints):
         self.waypoints = waypoints.waypoints
+        stop_lines = [self.get_closest_waypoint(p) for p in self.config['stop_line_positions']]
+        stop_lines.sort()
+        self.stop_lines = stop_lines
         self.sub2.unregister()
 
     def traffic_cb(self, msg):
@@ -98,7 +103,7 @@ class TLDetector(object):
 
     def image_cb(self, msg):
         """Identifies red lights in the incoming camera image and publishes the index
-            of the waypoint closest to the red light to /traffic_waypoint
+            of the waypoint closest to the red light's stop line to /traffic_waypoint
 
         Args:
             msg (Image): image from car-mounted camera
@@ -130,7 +135,7 @@ class TLDetector(object):
         """Identifies the closest path waypoint to the given position
             https://en.wikipedia.org/wiki/Closest_pair_of_points_problem
         Args:
-            pose (Pose): position to match a waypoint to
+            pose (Pose/list): position to match a waypoint to
 
         Returns:
             int: index of the closest waypoint in self.waypoints
@@ -138,9 +143,11 @@ class TLDetector(object):
         """
         #TODO implement
         # Naive approach
+        if isinstance(pose, Pose):
+            pose = [pose.position.x, pose.position.y]
         def d2(p1, p2):
-            dx = p1.position.x - p2.position.x
-            dy = p1.position.y - p2.position.y
+            dx = p1[0] - p2.position.x
+            dy = p1[1] - p2.position.y
             return dx*dx + dy*dy
 
         if self.waypoints is None:
@@ -257,36 +264,39 @@ class TLDetector(object):
             location and color
 
         Returns:
-            int: index of waypoint closes to the upcoming traffic light (-1 if none exists)
+            int: index of waypoint closes to the upcoming stop line for a traffic light (-1 if none exists)
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
         light = None
-        light_positions = self.config['light_positions']
+#         light_positions = self.config['light_positions']
         if not all([self.pose, self.lights, self.waypoints]):
             return -1, TrafficLight.UNKNOWN
         car_position = self.get_closest_waypoint(self.pose.pose)
 
         #TODO find the closest visible traffic light (if one exists)
 
-        if (self.lights is None) or (self.waypoints is None):
+        if (self.lights is None) or (self.waypoints is None) or (self.stop_lines is None):
             return -1, TrafficLight.UNKNOWN
 
         lights = self.lights
         max_wp = lights[-1][0]
         min_wp = lights[0][0]
         light_wp = len(self.waypoints)
-        for wp_idx, tl in lights:
-            if ((wp_idx >= car_position) and (wp_idx < light_wp)) \
-                or ((wp_idx == min_wp) and (car_position > max_wp)):
-                light_wp = wp_idx
-                light = tl
+        if car_position > max_wp:
+            light_wp, light = lights[0]
+        else:
+            for wp_idx, tl in lights:
+                if wp_idx >= car_position:
+                    light_wp, light = wp_idx, tl
+                    break
 
         ############################################################
         # Here we use the data given by "/vehicle/traffic_lights" for development purpose.
         # Need to change back to config file before submission
         if light:
-            return light_wp, light.state
+            stop_line_idx = bs.bisect_right(self.stop_lines, light_wp)-1
+            return self.stop_lines[stop_line_idx], light.state
         ############################################################
 
         # if light:

@@ -25,7 +25,6 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
 LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
-OFFSET_DIST = 24.  # Distance between the traffic light and the stopping line.
 
 
 def dist(a, b):
@@ -52,7 +51,7 @@ class WaypointUpdater(object):
         self.current_pose = None
         self.red_light_position = None
         self.current_velocity = 0
-        self.red_light_wp = -1
+        self.stop_line_wp = -1
 
         self.loop()
 
@@ -62,34 +61,18 @@ class WaypointUpdater(object):
             rate.sleep()
             if (self.base_wps is None) or (self.current_pose is None):
                 continue
+
             base_wps = self.base_wps
             wp_dist = self.wp_dist
-            curr_pos = self.current_pose.position
-
             wp_num = len(base_wps)
-            prev_pos = base_wps[self.last_wp_idx-1].pose.pose.position
-            prev_dist = dist(prev_pos, curr_pos)
+            curr_pos = self.current_pose.position
 
             # Look for immediate next waypoint
             # We assume the waypoints are sorted according to the order by
             # which the car is expected to go through.
-            min_dist = float('inf')
-            for i in xrange(wp_num):
-                idx = (self.last_wp_idx + i) % wp_num
-                wp_pos = base_wps[idx].pose.pose.position
-                # seg_dist = dist(wp_pos, prev_pos)
-                curr_dist = dist(wp_pos, curr_pos)
-                d = curr_dist + prev_dist
-                if d < min_dist:
-                    self.last_wp_idx = idx
-                    min_dist = d
-                else:
-                    break
-                #if curr_dist <= seg_dist and prev_dist <= seg_dist:
-                #    self.last_wp_idx = idx
-                #    break
-                prev_pos = wp_pos
-                prev_dist = curr_dist
+            opt_idx_f, min_dist_f = self.search_immediate_next_waypoint(curr_pos, self.last_wp_idx, True)
+            opt_idx_b, min_dist_b = self.search_immediate_next_waypoint(curr_pos, self.last_wp_idx, False)
+            self.last_wp_idx = opt_idx_f if min_dist_f < min_dist_b else opt_idx_b
         
             # TODO: Need modifications to take care the traffic light scenario
             # Construct waypoints for the vehicle to follow
@@ -106,20 +89,13 @@ class WaypointUpdater(object):
             wp_d[0] = dist(curr_pos, waypoints[0].pose.pose.position)
 
             # Get deceleration limit to determine achievable speed
-            rospy.loginfo('### red_light_wp: %s', self.red_light_wp)
-            if self.red_light_wp >= 0:
+            rospy.loginfo('### stop_line_wp: %s', self.stop_line_wp)
+            if self.stop_line_wp >= 0:
                 max_decel = min(abs(rospy.get_param('/dbw_node/decel_limit', -1.)), 1.)
                 v = 0.
-                idx = self.red_light_wp
+                idx = self.stop_line_wp
 
-                # offset idx to match stopping line
-                offset = OFFSET_DIST
-                while offset > 0.:
-                    offset -= self.wp_dist[idx]
-                    idx = (idx - 1) % wp_num
-
-                max_zero_count = 3
-                count = 0
+                zero_count = 4
                 while idx != (self.last_wp_idx-1) % wp_num:
                     wp_idx = (idx - self.last_wp_idx) % wp_num
                     if wp_idx < LOOKAHEAD_WPS:
@@ -131,8 +107,8 @@ class WaypointUpdater(object):
                                 break
                     if v >= max_v: break
                     idx = (idx - 1) % wp_num
-                    if count < max_zero_count:
-                        count += 1
+                    if zero_count > 0:
+                        zero_count -= 1
                     else:
                         v = math.sqrt(v*v + 2*max_decel*wp_dist[idx])
 
@@ -143,6 +119,28 @@ class WaypointUpdater(object):
             final_waypoints.header.stamp = rospy.Time.now()
             final_waypoints.waypoints = waypoints
             self.final_waypoints_pub.publish(final_waypoints)
+
+    def search_immediate_next_waypoint(self, curr_pos, last_idx, forward):
+        base_wps = self.base_wps
+        wp_num = len(base_wps)
+        wp_dist = self.wp_dist
+        min_dist = float('inf')
+        opt_idx = 0
+        inc = 1 if forward else -1
+        prev_pos = base_wps[(last_idx - inc) % wp_num].pose.pose.position
+        prev_dist = dist(prev_pos, curr_pos)
+        for i in xrange(wp_num):
+            idx = (last_idx + i*inc) % wp_num
+            wp_pos = base_wps[idx].pose.pose.position
+            curr_dist = dist(wp_pos, curr_pos)
+            d = prev_dist + curr_dist
+            if d < min_dist:
+                min_dist = d
+                opt_idx = idx
+            else:
+                return opt_idx if forward else (opt_idx+1) % wp_num, min_dist
+            prev_dist = curr_dist
+        return opt_idx if forward else (opt_idx+1) % wp_num, min_dist
 
     def pose_cb(self, msg):
         # TODO: Implement
@@ -160,7 +158,7 @@ class WaypointUpdater(object):
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
-        self.red_light_wp = msg.data
+        self.stop_line_wp = msg.data
 
 
     def obstacle_cb(self, msg):

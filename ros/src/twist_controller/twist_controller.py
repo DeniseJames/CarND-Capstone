@@ -30,22 +30,20 @@ class Controller(object):
             self.timestamp = rospy.Time.now().to_sec()
 
     def control(self, linear_velocity, angular_velocity, current_velocity, enable_dbw, cte):
-        # TODO: Change the arg, kwarg list to suit your needs
-        # Return throttle, brake, steer
-
         if not enable_dbw:
             # Reset PID
             self.correction_pid.reset()
             self.speed_controller.reset()
             return 0, 0, False
 
-        t = rospy.Time.now().to_sec()
-        delta_t = t - self.timestamp
-        self.timestamp = t
-        # Calculate throttle, and under which the linear velocity after 1s
+        # t = rospy.Time.now().to_sec()
+        # delta_t = t - self.timestamp
+        # self.timestamp = t
+
+        # Calculate throttle, and under which the linear velocity after 2s
         ctrl, final_velocity, is_throttle = self.speed_controller.get_control(linear_velocity,
                                                                               current_velocity,
-                                                                              delta_t)
+                                                                              2.)
 
         if current_velocity >= .5:
             correction = self.correction_pid.step(cte, delta_t)
