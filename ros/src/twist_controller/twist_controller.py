@@ -36,12 +36,14 @@ class Controller(object):
             self.speed_controller.reset()
             return 0, 0, False
 
-        delta_t = 2.
+        t = rospy.Time.now().to_sec()
+        delta_t = t - self.timestamp
+        self.timestamp = t
 
         # Calculate throttle, and under which the linear velocity after 2s
         ctrl, final_velocity, is_throttle = self.speed_controller.get_control(linear_velocity,
                                                                               current_velocity,
-                                                                              delta_t)
+                                                                              2.)
 
         if current_velocity >= .5:
             correction = self.correction_pid.step(cte, delta_t)
