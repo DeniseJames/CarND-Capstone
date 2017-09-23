@@ -13,6 +13,7 @@ def load_image_into_numpy_array(cv_image):
 class DeepDetector(object):
     def __init__(self, model_path):
         # Load TensorFlow model into memory
+        self.sess = None
         detection_graph = tf.Graph()
         with detection_graph.as_default():
             od_graph_def = tf.GraphDef()
@@ -37,6 +38,7 @@ class DeepDetector(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
+        if self.sess is None: return TrafficLight.UNKNOWN
         image = load_image_into_numpy_array(image)
         (scores, classes) = self.sess.run([self.detection_scores, self.detection_classes],
                                           feed_dict={self.image_tensor: image})
