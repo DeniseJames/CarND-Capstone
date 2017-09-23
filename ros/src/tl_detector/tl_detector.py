@@ -7,7 +7,7 @@ from styx_msgs.msg import Lane
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 # from light_classification.tl_classifier import TLClassifier
-#from deep_detector.deep_detector import DeepDetector
+from deep_detector.deep_detector import DeepDetector
 import tf
 import cv2
 import yaml
@@ -49,8 +49,8 @@ class TLDetector(object):
 
         self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
 
-        # model_path = rospy.get_param('~model_path')
-        # self.deep_detector = DeepDetector(model_path)
+        model_path = rospy.get_param('~model_path')
+        self.deep_detector = DeepDetector(model_path)
         # self.light_classifier = TLClassifier(model_path)
         self.bridge = CvBridge()
         self.listener = tf.TransformListener()
@@ -294,14 +294,15 @@ class TLDetector(object):
         ############################################################
         # Here we use the data given by "/vehicle/traffic_lights" for development purpose.
         # Need to change back to config file before submission
-        if light:
-            stop_line_idx = bs.bisect_right(self.stop_lines, light_wp)-1
-            return self.stop_lines[stop_line_idx], light.state
+        # if light:
+        #     stop_line_idx = bs.bisect_right(self.stop_lines, light_wp)-1
+        #     return self.stop_lines[stop_line_idx], light.state
         ############################################################
 
-        # if light:
-        #     state = self.get_light_state()
-        #     return light_wp, state
+        if light:
+            state = self.get_light_state()
+            stop_line_idx = bs.bisect_right(self.stop_lines, light_wp)-1
+            return self.stop_lines[stop_line_idx], state
         # if light:
         #     state = self.get_light_state(light)
         #     return light_wp, state
@@ -309,8 +310,7 @@ class TLDetector(object):
         return -1, TrafficLight.UNKNOWN
 
     def close(self):
-        # self.deep_detector.close()
-        pass
+        self.deep_detector.close()
 
 if __name__ == '__main__':
     try:

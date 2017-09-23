@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <launch>
     <node pkg="tl_detector" type="tl_detector.py" name="tl_detector" output="screen" cwd="node">
-        <param name="model_path" value="../models/model_sim.pb" />
+        <param name="model_path" value="$(find tl_detector)deep_detector/models/frozen_inference_graph_sim.pb" />
     </node>
 </launch>
