@@ -15,7 +15,7 @@ from lowpass import LowPassFilter
 class Controller(object):
     def __init__(self, vehicle_mass, fuel_capacity, brake_deadband, decel_limit, accel_limit,
                        wheel_radius, wheel_base, steer_ratio, max_lat_accel, max_steer_angle):
-        # TODO: Implement
+
         total_mass = vehicle_mass + fuel_capacity * GAS_DENSITY
         self.speed_controller = SpeedController(total_mass, wheel_radius, brake_deadband,
                                                 accel_limit, decel_limit)
@@ -30,22 +30,26 @@ class Controller(object):
             self.timestamp = rospy.Time.now().to_sec()
 
     def control(self, linear_velocity, angular_velocity, current_velocity, enable_dbw, cte):
+
         if not enable_dbw:
             # Reset PID
             self.correction_pid.reset()
             self.speed_controller.reset()
             return 0, 0, False
 
+        # Get sampled time for PID
         t = rospy.Time.now().to_sec()
         delta_t = t - self.timestamp
         self.timestamp = t
 
-        # Calculate throttle, and under which the linear velocity after 2s
+        # Calculate control (throttle or brake), and under which the linear velocity after 2s
         ctrl, final_velocity, is_throttle = self.speed_controller.get_control(linear_velocity,
                                                                               current_velocity,
                                                                               2.)
 
-        if current_velocity >= .5:
+        # Update steer only when the vehicle is moving to save computation power and
+        # avoid unwanted accumulation of `I` value in steer PID when the vehicle is still.
+        if current_velocity >= .1:
             correction = self.correction_pid.step(cte, delta_t)
             angular_velocity = self.angle_filter.filt(angular_velocity)
             steer = self.yaw_controller.get_steering(final_velocity, angular_velocity, current_velocity) + correction

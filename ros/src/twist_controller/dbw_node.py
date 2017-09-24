@@ -57,9 +57,7 @@ class DBWNode(object):
         self.brake_pub = rospy.Publisher('/vehicle/brake_cmd',
                                          BrakeCmd, queue_size=1)
 
-        # TODO: Create `TwistController` object
-        # self.controller = TwistController(<Arguments you wish to provide>)
-        # Hard coded pid constants, need experimenting
+        # Create controller
         self.controller = Controller(vehicle_mass, fuel_capacity, brake_deadband, decel_limit,
                                      accel_limit, wheel_radius, wheel_base, steer_ratio,
                                      max_lat_accel, max_steer_angle)
@@ -73,8 +71,14 @@ class DBWNode(object):
         self.final_waypoints = None     # list of waypoints
         self.max_steer = max_steer_angle
 
-
-        # TODO: Subscribe to all the topics you need to
+        """
+        Subscribe to topics:
+        - /twist_cmd: Target linear and angular velocity (Determine controls)
+        - /current_velocity: Current velocity (Determine controls)
+        - /vehicle/dbw_enabled: Flag indicates autonomous or manual mode
+        - /current_pose: Current position (Determine CTE for steering PID)
+        - /final_waypoints: Upcoming waypoints to follow
+        """
         self.twist_cmd_sub = rospy.Subscriber('/twist_cmd', TwistStamped, self.twist_cmd_cb, queue_size=1)
         self.current_velocity_sub = rospy.Subscriber('/current_velocity', TwistStamped, self.current_velocity_cb, queue_size=1)
         self.dbw_enabled_sub = rospy.Subscriber('/vehicle/dbw_enabled', Bool, self.dbw_enabled_cb, queue_size=1)
@@ -86,18 +90,20 @@ class DBWNode(object):
     def loop(self):
         rate = rospy.Rate(50) # 50Hz
         while not rospy.is_shutdown():
-            # TODO: Get predicted throttle, brake, and steering using `twist_controller`
-            # You should only publish the control commands if dbw is enabled
+            # Skip this round if not everything is ready
             if (self.target is None) or (self.curr_coord is None) or (self.final_waypoints is None):
                 rate.sleep()
                 continue
+
+            # Get controls
             cte = self.get_cte()
             ctrl, steer, is_throttle = self.controller.control(self.target[0],
                                                                self.target[1],
                                                                self.curr_v,
                                                                self.dbw_enabled,
                                                                cte)
-            steer = min(max(-self.max_steer, steer), self.max_steer)
+
+            steer = min(max(-self.max_steer, steer), self.max_steer)  # Crop steering angle
             if self.dbw_enabled:
                 if is_throttle: rospy.loginfo('throttle: %s, steer: %s', ctrl, steer)
                 else: rospy.loginfo('brake: %s, steer: %s', ctrl, steer)
@@ -105,17 +111,25 @@ class DBWNode(object):
             rate.sleep()
 
     def publish(self, ctrl, steer, is_throttle):
+        """
+        Publishes controls.
+
+        Args:
+            ctrl: Speed control, either throttle or brake
+            steer: Steer control
+            is_throttle: Flag indicates whether `ctrl` is throttle or brake
+        """
         if is_throttle:
             tcmd = ThrottleCmd()
             tcmd.enable = True
             tcmd.pedal_cmd_type = ThrottleCmd.CMD_PERCENT
-            tcmd.pedal_cmd = ctrl # throttle
+            tcmd.pedal_cmd = ctrl  # throttle
             self.throttle_pub.publish(tcmd)
         else:
             bcmd = BrakeCmd()
             bcmd.enable = True
             bcmd.pedal_cmd_type = BrakeCmd.CMD_TORQUE
-            bcmd.pedal_cmd = ctrl # brake
+            bcmd.pedal_cmd = ctrl  # brake
             self.brake_pub.publish(bcmd)
 
         scmd = SteeringCmd()
@@ -145,7 +159,7 @@ class DBWNode(object):
         self.final_waypoints = msg.waypoints
 
     def get_cte(self):
-        # Fit waypoints with polynomial or order 3 (at most).
+        # Fit waypoints with polynomial or order 3 (at most), using up to 8 upcoming waypoints.
         waypoints = self.final_waypoints[:8]
         dy = waypoints[-1].pose.pose.position.y - waypoints[0].pose.pose.position.y
         dx = waypoints[-1].pose.pose.position.x - waypoints[0].pose.pose.position.x
@@ -161,12 +175,12 @@ class DBWNode(object):
             xs.append(c*x - s*y)
             ys.append(s*x + c*y)
 
+        # Apply Newton's method to find cte, using 5 iterations
         f = np.polyfit(xs, ys, order)
         fp = [i*f[i] for i in xrange(1, len(f))]
         fpp = [i*fp[i] for i in xrange(1, len(fp))]
 
-        # Apply Newton's method to find cte, using 5 iterations
-        xn = 0.
+        xn = 0.  # Initial guess
         for _ in xrange(5):
             f_n = np.polyval(f, xn)
             fp_n = np.polyval(fp, xn)

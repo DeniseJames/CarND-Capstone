@@ -26,16 +26,15 @@ class TLDetector(object):
         self.camera_image = None
         self.lights = None
 
+        """
+        Subscribe to topics:
+        - /current_pose: Current position (Determine next stop line)
+        - /base_waypoints: Fixed world waypoints
+        - /vehicle/traffic_lights: Traffic light positions
+        - /image_color: Image for detection
+        """
         sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb, queue_size=1)
         self.sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb, queue_size=1)
-
-        '''
-        /vehicle/traffic_lights helps you acquire an accurate ground truth data source for the traffic light
-        classifier, providing the location and current color state of all traffic lights in the
-        simulator. This state can be used to generate classified images or subbed into your solution to
-        help you work on another single component of the node. This topic won't be available when
-        testing your solution in real life so don't rely on it in the final submission.
-        '''
         sub3 = rospy.Subscriber('/vehicle/traffic_lights', TrafficLightArray, self.traffic_cb, queue_size=1)
         sub6 = rospy.Subscriber('/image_color', Image, self.image_cb, queue_size=1)
 
@@ -43,10 +42,10 @@ class TLDetector(object):
         self.config = yaml.load(config_string)
         self.stop_lines = None
 
-        self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
+        self.upcoming_stop_line_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
 
         self.bridge = CvBridge()
-        self.listener = tf.TransformListener()
+        self.deep_detector = None
 
         self.state = TrafficLight.UNKNOWN
         self.last_state = TrafficLight.UNKNOWN
@@ -62,12 +61,19 @@ class TLDetector(object):
 
     def waypoints_cb(self, waypoints):
         self.waypoints = waypoints.waypoints
+        # Pre-compute waypoint indices for stop lines
         stop_lines = [self.get_closest_waypoint(p) for p in self.config['stop_line_positions']]
         stop_lines.sort()
         self.stop_lines = stop_lines
         self.sub2.unregister()
 
     def traffic_cb(self, msg):
+        """
+        Pre-compute waypoint indices for traffic lights
+
+        Args:
+            msg (TrafficLightArray): list of traffic light info
+        """
         if self.waypoints is None:
             return
         wp_num = len(self.waypoints)
@@ -100,9 +106,9 @@ class TLDetector(object):
             self.last_state = self.state
             light_wp = light_wp if state == TrafficLight.RED or state == TrafficLight.YELLOW else -1
             self.last_wp = light_wp
-            self.upcoming_red_light_pub.publish(Int32(light_wp))
+            self.upcoming_stop_line_pub.publish(Int32(light_wp))
         else:
-            self.upcoming_red_light_pub.publish(Int32(self.last_wp))
+            self.upcoming_stop_line_pub.publish(Int32(self.last_wp))
         self.state_count += 1
 
     def get_closest_waypoint(self, pose):
@@ -115,7 +121,6 @@ class TLDetector(object):
             int: index of the closest waypoint in self.waypoints
 
         """
-        #TODO implement
         # Naive approach
         if isinstance(pose, Pose):
             pose = [pose.position.x, pose.position.y]
@@ -142,6 +147,8 @@ class TLDetector(object):
             self.prev_light_loc = None
             return False
 
+        if self.deep_detector is None: return TrafficLight.UNKNOWN
+
         self.camera_image.encoding = "rgb8"
         cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "passthrough")
         return self.deep_detector.get_light_state(cv_image)
@@ -156,13 +163,11 @@ class TLDetector(object):
 
         """
         light = None
-        if not all([self.pose, self.lights, self.waypoints]):
+        if not all([self.pose, self.lights, self.waypoints, self.stop_lines]):
             return -1, TrafficLight.UNKNOWN
         car_position = self.get_closest_waypoint(self.pose.pose)
 
-        if (self.lights is None) or (self.waypoints is None) or (self.stop_lines is None):
-            return -1, TrafficLight.UNKNOWN
-
+        # Search for immediate next traffic light
         lights = self.lights
         max_wp = lights[-1][0]
         min_wp = lights[0][0]
