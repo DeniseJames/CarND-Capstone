@@ -21,7 +21,7 @@ class Controller(object):
                                                 accel_limit, decel_limit)
         self.yaw_controller = YawController(wheel_base, steer_ratio, 0.,
                                             max_lat_accel, max_steer_angle)
-        kp, ki, kd = np.array([0.63, 0.003, 2.]) * np.pi / 180. * steer_ratio
+        kp, ki, kd = np.array([0.3, 0.003, 2.5]) * np.pi / 180. * steer_ratio
         self.correction_pid = PID(kp, ki, kd, mn=-math.pi/2., mx=math.pi/2.)
         self.angle_filter = LowPassFilter(1., 1.)
         self.steer_filter = LowPassFilter(1., 1.)
@@ -56,6 +56,5 @@ class Controller(object):
             steer = self.steer_filter.filt(steer)
         else:
             steer = self.steer_filter.get()
-        
-        return ctrl, steer, is_throttle
 
+        return ctrl, steer, is_throttle
