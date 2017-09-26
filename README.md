@@ -1,10 +1,14 @@
-This is the project repo for the final project of the Udacity Self-Driving Car Nanodegree: Programming a Real Self-Driving Car. For more information about the project, see the project introduction [here](https://classroom.udacity.com/nanodegrees/nd013/parts/6047fe34-d93c-4f50-8336-b70ef10cb4b2/modules/e1a23b06-329a-4684-a717-ad476f0d8dff/lessons/462c933d-9f24-42d3-8bdc-a08a5fc866e4/concepts/5ab4b122-83e6-436d-850f-9f4d26627fd9).
+## Self-Driving Car Capstone Project
+
+This is the final capstone project of the Self Driving Car Nanodegree course offered by Udacity.
+
+In this project we write code to help drive Carla (an actual car) autonomously although at a maximum speed of 10mph for safety reasons. This project brings together several aspects of the SDC course such as Perception, Planning and Control. We first test the code on the simulator and then run it on Carla. The code is written using the ROS (Robotics Operating System) framework which works both on the simulator as well as on Carla. The final project report for our team sumission is [here](https://github.com/DeniseJames/CarND-Capstone/blob/master/SDC%20Capstone%20Project.pdf). 
 
 ### Installation 
 
 * Be sure that your workstation is running Ubuntu 16.04 Xenial Xerus or Ubuntu 14.04 Trusty Tahir. [Ubuntu downloads can be found here](https://www.ubuntu.com/download/desktop). 
 * If using a Virtual Machine to install Ubuntu, use the following configuration as minimum:
-  * 2 CPU
+  * 2 CPUIn this final capstone project of the Self-Driving Car Nanodegree course we write code to help drive Carla (an actual car) autonomously although at a maximum speed of 10mph for safety reasons. This project brings together several aspects of the SDC course such as Perception, Planning and Control. We first test the code on the simulator and then run it on Carla. The code is written using the ROS (Robotics Operating System) framework which works both on the simulator as well as on Carla.
   * 2 GB system memory
   * 25 GB of free hard drive space
   
