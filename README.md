@@ -4,6 +4,9 @@ This is the final capstone project of the Self Driving Car Nanodegree course off
 
 In this project we write code to help drive Carla (an actual car) autonomously although at a maximum speed of 10mph for safety reasons. This project brings together several aspects of the SDC course such as Perception, Planning and Control. We first test the code on the simulator and then run it on Carla. The code is written using the ROS (Robotics Operating System) framework which works both on the simulator as well as on Carla. The final project report for our team sumission is [here](https://github.com/DeniseJames/CarND-Capstone/blob/master/SDC%20Capstone%20Project.pdf). 
 
+The following gives details on how to run the code:
+---
+
 ### Installation 
 
 * Be sure that your workstation is running Ubuntu 16.04 Xenial Xerus or Ubuntu 14.04 Trusty Tahir. [Ubuntu downloads can be found here](https://www.ubuntu.com/download/desktop). 
