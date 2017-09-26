@@ -10,6 +10,7 @@ from deep_detector.deep_detector import DeepDetector
 import tf
 import cv2
 import yaml
+import time
 
 import numpy as np
 import bisect as bs
@@ -25,6 +26,7 @@ class TLDetector(object):
         self.waypoints = None
         self.camera_image = None
         self.lights = None
+        self.config = None
 
         """
         Subscribe to topics:
@@ -62,6 +64,7 @@ class TLDetector(object):
     def waypoints_cb(self, waypoints):
         self.waypoints = waypoints.waypoints
         # Pre-compute waypoint indices for stop lines
+        while self.config is None: time.sleep(0.05)
         stop_lines = [self.get_closest_waypoint(p) for p in self.config['stop_line_positions']]
         stop_lines.sort()
         self.stop_lines = stop_lines

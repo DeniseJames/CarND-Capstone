@@ -157,6 +157,7 @@ class DBWNode(object):
 
     def final_waypoints_cb(self, msg):
         self.final_waypoints = msg.waypoints
+        rospy.loginfo('#### target_vels: %s', [l.twist.twist.linear.x for l in self.final_waypoints])
 
     def get_cte(self):
         # Fit waypoints with polynomial or order 3 (at most), using up to 8 upcoming waypoints.
