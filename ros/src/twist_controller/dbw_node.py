@@ -97,6 +97,7 @@ class DBWNode(object):
 
             # Get controls
             cte = self.get_cte()
+            rospy.loginfo("#### cte: %s", cte)
             ctrl, steer, is_throttle = self.controller.control(self.target[0],
                                                                self.target[1],
                                                                self.curr_v,
@@ -160,11 +161,10 @@ class DBWNode(object):
         rospy.loginfo('#### target_vels: %s', [l.twist.twist.linear.x for l in self.final_waypoints])
 
     def get_cte(self):
-        # Fit waypoints with polynomial or order 3 (at most), using up to 8 upcoming waypoints.
+        # Fit waypoints with polynomial or order 3 (at most), using up to 4 upcoming waypoints.
         waypoints = self.final_waypoints[:8]
-        dy = waypoints[-1].pose.pose.position.y - waypoints[0].pose.pose.position.y
-        dx = waypoints[-1].pose.pose.position.x - waypoints[0].pose.pose.position.x
-        yaw = math.atan2(dy, dx)
+        q = waypoints[0].pose.pose.orientation
+        _, _, yaw = tf.transformations.euler_from_quaternion((q.x, q.y, q.z, q.w))
         c, s = math.cos(-yaw), math.sin(-yaw)
         x0, y0 = self.curr_coord
         order = min(3, len(waypoints)-1)

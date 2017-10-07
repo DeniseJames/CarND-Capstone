@@ -7,15 +7,33 @@ from styx_msgs.msg import Lane
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from deep_detector.deep_detector import DeepDetector
+from functools import partial
 import tf
 import cv2
 import yaml
 import time
+import os
 
 import numpy as np
 import bisect as bs
 
 STATE_COUNT_THRESHOLD = 3
+
+
+def joinfiles(directory, filename, chunksize=1024):
+    print "Restoring model:", filename, "from directory:", directory
+    if os.path.exists(directory):
+        if os.path.exists(filename):
+            os.remove(filename)
+        output = open(filename, 'wb')
+        chunks = os.listdir(directory)
+        chunks.sort()
+        for fname in chunks:
+            fpath = os.path.join(directory, fname)
+            with open(fpath, 'rb') as fileobj:
+                for chunk in iter(partial(fileobj.read, chunksize), ''):
+                    output.write(chunk)
+        output.close()
 
 
 class TLDetector(object):
@@ -55,6 +73,8 @@ class TLDetector(object):
         self.state_count = 0
 
         model_path = rospy.get_param('~model_path')
+        directory, _ = os.path.splitext(model_path)
+        joinfiles(directory, model_path)
         self.deep_detector = DeepDetector(model_path)
         rospy.spin()
 
@@ -193,9 +213,10 @@ class TLDetector(object):
         self.deep_detector.close()
 
 if __name__ == '__main__':
+    tl_detector = None
     try:
         tl_detector = TLDetector()
     except rospy.ROSInterruptException:
         rospy.logerr('Could not start traffic node.')
     finally:
-        tl_detector.close()
+        if tl_detector: tl_detector.close()

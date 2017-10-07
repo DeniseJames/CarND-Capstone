@@ -21,7 +21,7 @@ class Controller(object):
                                                 accel_limit, decel_limit)
         self.yaw_controller = YawController(wheel_base, steer_ratio, 0.,
                                             max_lat_accel, max_steer_angle)
-        kp, ki, kd = np.array([0.25, 0.003, 3.0]) * np.pi / 180. * steer_ratio
+        kp, ki, kd = np.array([0.25, 0.003, 3.0])*0.125# * np.pi / 180. * steer_ratio
         self.correction_pid = PID(kp, ki, kd, mn=-math.pi/2., mx=math.pi/2.)
         self.angle_filter = LowPassFilter(1., 1.)
         self.steer_filter = LowPassFilter(1., 1.)
@@ -51,8 +51,9 @@ class Controller(object):
         # avoid unwanted accumulation of `I` value in steer PID when the vehicle is still.
         if current_velocity >= .1:
             correction = self.correction_pid.step(cte, delta_t)
-            angular_velocity = self.angle_filter.filt(angular_velocity)
-            steer = self.yaw_controller.get_steering(final_velocity, angular_velocity, current_velocity) + correction
+            angular_velocity = self.angle_filter.filt(angular_velocity + correction)
+            rospy.loginfo("final_v: %s", final_velocity)
+            steer = self.yaw_controller.get_steering(final_velocity, angular_velocity, current_velocity)
             steer = self.steer_filter.filt(steer)
         else:
             steer = self.steer_filter.get()
